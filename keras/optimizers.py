@@ -606,93 +606,167 @@ class TFOptimizer(Optimizer):
         raise NotImplementedError
 
 
+#
+# class GDAM(Optimizer):
+#     """Gradient descent with altruistic momentum
+#
+#
+#     # Arguments
+#         lr: float >= 0. Learning rate.
+#         momentum: float >= 0. Parameter updates momentum.
+#         decay: float >= 0. Learning rate decay over each update.
+#         altruicity: float >= 0.
+#
+#     """
+#
+#     def __init__(self, lr=0.01, momentum=0., decay=0.,
+#                  altruicity = 0, **kwargs):
+#         super(SGD, self).__init__(**kwargs)
+#         self.iterations = K.variable(0., name='iterations')
+#         self.lr = K.variable(lr, name='lr')
+#         self.momentum = K.variable(momentum, name='momentum')
+#         self.decay = K.variable(decay, name='decay')
+#         self.initial_decay = decay
+#         self.altruicity = K.variable(altruicity, name='altruicity')
+#
+#     def get_updates(self, params, constraints, loss):
+#         # Here we redefine the cost function such that it includes the product
+#         # of the previous update and the update to be made
+#
+#         #This is called in _make_train_function, within
+#         # the Model class's fit function. The train function is then
+#         # fed to _fit_loop, where it is called every batch.
+#         # => thus only called once. The list of update rules is what matters.
+#
+#
+#         # to store things between updates,
+#         # initialize them then put them in the update list
+#         dw_old = K.zeros_like(params)
+#             # ^ still don't feel comfortable trusting the update rule...
+#
+#         # remember that each param in params can be a tensor
+#
+#         grads = self.get_gradients(loss, params)
+#         self.updates = []
+#
+#         lr = self.lr
+#         if self.initial_decay > 0:
+#             lr *= (1. / (1. + self.decay * self.iterations))
+#             self.updates .append(K.update_add(self.iterations, 1))
+#
+#
+#         # naive update
+#         dw = - lr * grads # this is sort of an expensive cast
+#
+#         # sum product of proposed and past updates
+#         #       NOTE temporary. Assumes all p in params have shape (1,)
+#         #              In general should take the trace of resulting tensor
+#         sum_changes = K.sum(K.batch_dot(dw,dw_old,axes=1),axis=0)
+#
+#         self.updates.append(K.update(dw_old, dw))
+#
+#         new_loss = loss - self.altruicity * sum_changes
+#
+#         final_grads = self.get_gradients(new_loss, params)
+#         ### REST OF def IN PROGRESS
+#
+#         # momentum
+#         shapes = [K.get_variable_shape(p) for p in params]
+#         # why do we need to initlize the weights like this? never updated
+#         self.weights = [self.iterations] + moments
+#         for p, g, m in zip(params, grads, moments):
+#
+#
+#             v = self.momentum * m - lr * g  # velocity
+#             self.updates.append(K.update(m, v))
+#
+#             if self.nesterov:
+#                 new_p = p + self.momentum * v - lr * g
+#             else:
+#                 new_p = p + v
+#
+#             # apply constraints
+#             if p in constraints:
+#                 c = constraints[p]
+#                 new_p = c(new_p)
+#
+#             self.updates.append(K.update(p, new_p))
+#         return self.updates
+#
+#     def get_config(self):
+#         config = {'lr': float(K.get_value(self.lr)),
+#                   'momentum': float(K.get_value(self.momentum)),
+#                   'decay': float(K.get_value(self.decay)),
+#                   'nesterov': self.nesterov}
+#         base_config = super(SGD, self).get_config()
+#         return dict(list(base_config.items()) + list(config.items()))
 
-class GDAM(Optimizer):
-    """Gradient descent with altruistic momentum
 
+class GraVa(Optimizer):
+    """GraVa optimizer.
+
+    Gradient variance reduction
 
     # Arguments
         lr: float >= 0. Learning rate.
-        momentum: float >= 0. Parameter updates momentum.
+        beta_1: float, 0 < beta < 1. Generally close to 1. 1st moment decay
+        beta_2: float, 0 < beta < 1. Generally close to 1. 2nd moment decay
+        var_care: float >= 0. How much to care about variance reduction
         decay: float >= 0. Learning rate decay over each update.
-        altruicity: float >= 0.
 
     """
 
-    def __init__(self, lr=0.01, momentum=0., decay=0.,
-                 altruicity = 0, **kwargs):
-        super(SGD, self).__init__(**kwargs)
-        self.iterations = K.variable(0., name='iterations')
+    def __init__(self, lr=0.001, beta_1=0.9, beta_2=0.999,
+                 var_care=1, decay=0., **kwargs):
+        super(GraVa, self).__init__(**kwargs)
+        self.iterations = K.variable(0, name='iterations')
         self.lr = K.variable(lr, name='lr')
-        self.momentum = K.variable(momentum, name='momentum')
+        self.beta_1 = K.variable(beta_1, name='beta_1')
+        self.beta_2 = K.variable(beta_2, name='beta_2')
+        self.var_vare = K.variable(var_care, name='var_care')
         self.decay = K.variable(decay, name='decay')
         self.initial_decay = decay
-        self.altruicity = K.variable(altruicity, name='altruicity')
 
     def get_updates(self, params, constraints, loss):
-        # Here we redefine the cost function such that it includes the product
-        # of the previous update and the update to be made
-
-
-        # to store things between updates,
-        # initialize them then put them in the update list
-        dw_old = K.zeros_like(params)
-            # ^ still don't feel comfortable trusting the update rule...
-
-        # remember that each param in params can be a tensor
-
         grads = self.get_gradients(loss, params)
-        self.updates = []
+        self.updates = [K.update_add(self.iterations, 1)]
 
         lr = self.lr
         if self.initial_decay > 0:
             lr *= (1. / (1. + self.decay * self.iterations))
-            self.updates .append(K.update_add(self.iterations, 1))
 
+        t = self.iterations + 1
+        lr_t = lr * (K.sqrt(1. - K.pow(self.beta_2, t)) /
+                     (1. - K.pow(self.beta_1, t)))
 
-        # naive update
-        dw = - lr * grads # this is sort of an expensive cast
-
-        # sum product of proposed and past updates
-        #       NOTE temporary. Assumes all p in params have shape (1,)
-        #              In general should take the trace of resulting tensor
-        sum_changes = K.sum(K.batch_dot(dw,dw_old,axes=1),axis=0)
-
-        self.updates.append(K.update(dw_old, dw))
-
-        new_loss = loss - self.altruicity * sum_changes
-
-        final_grads = self.get_gradients(new_loss, params)
-        ### REST OF def IN PROGRESS
-
-        # momentum
         shapes = [K.get_variable_shape(p) for p in params]
-        self.weights = [self.iterations] + moments
-        for p, g, m in zip(params, grads, moments):
+        ms = [K.zeros(shape) for shape in shapes]
+        vs = [K.zeros(shape) for shape in shapes]
+        self.weights = [self.iterations] + ms + vs
 
+        for p, g, m, v in zip(params, grads, ms, vs):
+            m_t = (self.beta_1 * m) + (1. - self.beta_1) * g
+            v_t = (self.beta_2 * v) + (1. - self.beta_2) * K.square(g)
+            p_t = p - lr_t * g / (1 + self.var_care * (K.square(m_t) - v_t))
 
-            v = self.momentum * m - lr * g  # velocity
-            self.updates.append(K.update(m, v))
+            self.updates.append(K.update(m, m_t))
+            self.updates.append(K.update(v, v_t))
 
-            if self.nesterov:
-                new_p = p + self.momentum * v - lr * g
-            else:
-                new_p = p + v
-
+            new_p = p_t
             # apply constraints
             if p in constraints:
                 c = constraints[p]
                 new_p = c(new_p)
-
             self.updates.append(K.update(p, new_p))
         return self.updates
 
     def get_config(self):
         config = {'lr': float(K.get_value(self.lr)),
-                  'momentum': float(K.get_value(self.momentum)),
+                  'beta_1': float(K.get_value(self.beta_1)),
+                  'beta_2': float(K.get_value(self.beta_2)),
                   'decay': float(K.get_value(self.decay)),
-                  'nesterov': self.nesterov}
-        base_config = super(SGD, self).get_config()
+                  'epsilon': self.epsilon}
+        base_config = super(Adam, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 
@@ -705,6 +779,7 @@ adadelta = Adadelta
 adam = Adam
 adamax = Adamax
 nadam = Nadam
+grava = GraVa
 
 
 def serialize(optimizer):
