@@ -723,7 +723,7 @@ class GraVa(Optimizer):
         self.lr = K.variable(lr, name='lr')
         self.beta_1 = K.variable(beta_1, name='beta_1')
         self.beta_2 = K.variable(beta_2, name='beta_2')
-        self.var_vare = K.variable(var_care, name='var_care')
+        self.var_care = K.variable(var_care, name='var_care')
         self.decay = K.variable(decay, name='decay')
         self.initial_decay = decay
 
