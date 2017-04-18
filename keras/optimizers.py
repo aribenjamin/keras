@@ -620,8 +620,8 @@ class GDAM(Optimizer):
     """
 
     def __init__(self, lr=0.01, momentum=0., decay=0.,
-                 altruicity = 0, **kwargs):
-        super(SGD, self).__init__(**kwargs)
+                 altruicity = 0., **kwargs):
+        super(GDAM, self).__init__(**kwargs)
         self.iterations = K.variable(0., name='iterations')
         self.lr = K.variable(lr, name='lr')
         self.momentum = K.variable(momentum, name='momentum')
@@ -641,12 +641,13 @@ class GDAM(Optimizer):
 
         # to store things between updates,
         # initialize them then put them in the update list
-        dw_old = K.zeros_like(params)
-            # ^ still don't feel comfortable trusting the update rule...
+        shapes = [K.get_variable_shape(p) for p in params]
+        dw_old = [K.zeros(shape) for shape in shapes]
+	            # ^ still don't feel comfortable trusting the update rule...
 
         # remember that each param in params can be a tensor
 
-        grads = self.get_gradients(loss, params)
+        grads = K.stack(self.get_gradients(loss, params))
         self.updates = []
 
         lr = self.lr
@@ -656,7 +657,7 @@ class GDAM(Optimizer):
 
 
         # naive update
-        dw = - lr * grads # this is sort of an expensive cast
+        dw = - lr * g  # this is sort of an expensive cast
 
         # sum product of proposed and past updates
         #       NOTE temporary. Assumes all p in params have shape (1,)
@@ -671,7 +672,6 @@ class GDAM(Optimizer):
         ### REST OF def IN PROGRESS
 
         # momentum
-        shapes = [K.get_variable_shape(p) for p in params]
         moments = [K.zeros(shape) for shape in shapes]
 
         # why do we need to initlize the weights like this? never updated
