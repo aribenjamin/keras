@@ -647,7 +647,7 @@ class GDAM(Optimizer):
         # remember that each param in params can be a tensor
 
         grads = self.get_gradients(loss, params)
-
+#  +        grads = K.stack(self.get_gradients(loss, params))
 
         self.updates = []
 
@@ -802,10 +802,7 @@ class GraVa(Optimizer):
             lr *= (1. / (1. + self.decay * self.iterations))
 
         t = self.iterations + 1
-        lr_t = lr * (K.sqrt(1. - K.pow(self.beta_2, t)) /
-                     (1. - K.pow(self.beta_1, t)))
 
-                     ### what's this?? TOdo figure out^
 
         shapes = [K.get_variable_shape(p) for p in params]
         ms = [K.zeros(shape) for shape in shapes]
