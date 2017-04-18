@@ -1137,7 +1137,11 @@ class Model(Container):
                 batch_logs = {}
                 batch_logs['batch'] = batch_index
                 batch_logs['size'] = len(batch_ids)
-                print(ins_batch)
+
+                # hacks by AB
+                batch_logs['input_batch']=ins_batch #this is a non-optimal hack
+
+
                 callbacks.on_batch_begin(batch_index, batch_logs)
                 outs = f(ins_batch)
                 if not isinstance(outs, list):
