@@ -647,6 +647,8 @@ class GDAM(Optimizer):
         # remember that each param in params can be a tensor
 
         grads = self.get_gradients(loss, params)
+
+
         self.updates = []
 
         lr = self.lr
@@ -704,6 +706,63 @@ class GDAM(Optimizer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+class CoordDescent(Optimizer):
+    """
+    Implements coordinate descent in a Hessian-free manner.
+
+    Expected to do well early in the optimization process but
+    still get caught up in shattered gradients.
+
+    x(t) = x(t-1) - lr * g * (x(t) - x(t-1)) / (g(t) - g(t-1))
+    """
+    def __init__(self, lr=0.001, **kwargs):
+        super(GraVa, self).__init__(**kwargs)
+        self.iterations = K.variable(0, name='iterations')
+        self.lr = K.variable(lr, name='lr')
+
+    def get_updates(self, params, constraints, loss):
+        grads = self.get_gradients(loss, params)
+        self.updates = [K.update_add(self.iterations, 1)]
+
+        lr = self.lr
+        if self.initial_decay > 0:
+            lr *= (1. / (1. + self.decay * self.iterations))
+
+        t = self.iterations + 1
+
+
+        shapes = [K.get_variable_shape(p) for p in params]
+        dps = [K.zeros(shape) for shape in shapes]
+        gs = [K.zeros(shape) for shape in shapes]
+        self.weights = [self.iterations] + dps + gs
+
+        for p, g, dp, g_old in zip(params, grads, dps, gs):
+            # change in parameter
+            dp_new = - lr * g * dp / (g - g_old)
+
+            new_p = p + dp_new
+
+            # apply constraints
+            if p in constraints:
+                c = constraints[p]
+                new_p = c(new_p)
+                dp_new = p - new_p
+
+            self.updates.append(K.update(g_old, g))
+            self.updates.append(K.update(dp, dp_new))
+            self.updates.append(K.update(p, new_p))
+        return self.updates
+
+    def get_config(self):
+        config = {'lr': float(K.get_value(self.lr)),
+                  'beta_1': float(K.get_value(self.beta_1)),
+                  'beta_2': float(K.get_value(self.beta_2)),
+                  'decay': float(K.get_value(self.decay)),
+                  'epsilon': self.epsilon}
+        base_config = super(Adam, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
+
+
 class GraVa(Optimizer):
     """GraVa optimizer.
 
@@ -731,6 +790,11 @@ class GraVa(Optimizer):
 
     def get_updates(self, params, constraints, loss):
         grads = self.get_gradients(loss, params)
+
+        # i believe that f is called on the whole minibatch. this means that
+        # the above get_gradients is evaluated for the average of the minibatch
+        #           need to figure out how to find variance of batch
+
         self.updates = [K.update_add(self.iterations, 1)]
 
         lr = self.lr
@@ -740,6 +804,8 @@ class GraVa(Optimizer):
         t = self.iterations + 1
         lr_t = lr * (K.sqrt(1. - K.pow(self.beta_2, t)) /
                      (1. - K.pow(self.beta_1, t)))
+
+                     ### what's this?? TOdo figure out^
 
         shapes = [K.get_variable_shape(p) for p in params]
         ms = [K.zeros(shape) for shape in shapes]
