@@ -1139,7 +1139,11 @@ class Model(Container):
                 batch_logs['size'] = len(batch_ids)
 
                 # hacks by AB
-                batch_logs['input_batch']=ins_batch #this is a non-optimal hack
+                batch_logs['input_batch']=ins_batch
+                #this is a non-optimal hack to make the inputs available
+                #in each batch. hope batch_logs don't accumulate
+                # shape of ins_batch is (for batch_size 128 in my MNIST CNN)
+                # [(128, 28, 28, 1), (128, 10), (128,), ()]
 
 
                 callbacks.on_batch_begin(batch_index, batch_logs)

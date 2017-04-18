@@ -812,7 +812,7 @@ class GraVa(Optimizer):
         for p, g, m, v in zip(params, grads, ms, vs):
             m_t = (self.beta_1 * m) + (1. - self.beta_1) * g
             v_t = (self.beta_2 * v) + (1. - self.beta_2) * K.square(g)
-            p_t = p - lr_t * g / (1 + self.var_care * (K.square(m_t) - v_t))
+            p_t = p - lr * g / (1 + self.var_care * (K.square(m_t) - v_t))
 
             self.updates.append(K.update(m, m_t))
             self.updates.append(K.update(v, v_t))
