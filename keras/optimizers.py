@@ -713,12 +713,15 @@ class CoordDescent(Optimizer):
     Expected to do well early in the optimization process but
     still get caught up in shattered gradients.
 
-    x(t) = x(t-1) - lr * g * (x(t) - x(t-1)) / (g(t) - g(t-1))
+    x(t) = x(t-1) - lr * g * (x(t) - x(t-1)) / (1 + h*(g(t) - g(t-1)))
     """
-    def __init__(self, lr=0.001, **kwargs):
-        super(GraVa, self).__init__(**kwargs)
+    def __init__(self, lr=0.001, hess = 1, m1 = 0, m2 = 0, **kwargs):
+        super(CoordDescent, self).__init__(**kwargs)
         self.iterations = K.variable(0, name='iterations')
         self.lr = K.variable(lr, name='lr')
+        self.hess = K.variable(hess, name='hess')
+        self.m1 = K.variable(m1, name='m1')
+        self.m2 = K.variable(m2, name='m2')
 
     def get_updates(self, params, constraints, loss):
         grads = self.get_gradients(loss, params)
@@ -728,39 +731,74 @@ class CoordDescent(Optimizer):
         if self.initial_decay > 0:
             lr *= (1. / (1. + self.decay * self.iterations))
 
-        t = self.iterations + 1
-
-
         shapes = [K.get_variable_shape(p) for p in params]
         dps = [K.zeros(shape) for shape in shapes]
-        gs = [K.zeros(shape) for shape in shapes]
-        self.weights = [self.iterations] + dps + gs
+        g_olds = [K.zeros(shape) for shape in shapes]
 
-        for p, g, dp, g_old in zip(params, grads, dps, gs):
-            # change in parameter
-            dp_new = - lr * g * dp / (g - g_old)
+        if self.m1 or self.m2:
 
-            new_p = p + dp_new
+            t = self.iterations + 1
+            b1 = (1. - K.pow(self.m1, t))
+            b2 = (1. - K.pow(self.m2, t)))
 
-            # apply constraints
-            if p in constraints:
-                c = constraints[p]
-                new_p = c(new_p)
-                dp_new = p - new_p
+            ms = [K.zeros(shape) for shape in shapes]
+            vs = [K.zeros(shape) for shape in shapes]
+            self.weights = [self.iterations] + dps + g_olds + ms + vs
 
-            self.updates.append(K.update(g_old, g))
-            self.updates.append(K.update(dp, dp_new))
-            self.updates.append(K.update(p, new_p))
+            for p, g, g_old, dp, m1_t, m2_t in zip(params, grads, g_olds, dps, ms, vs):
+                # first and second derivates
+                m1_v = (self.m1 * m1_t) + (1. - self.m1) * g
+                m2_v = (self.m2 * m2_t) + (1. - self.m2) * (g - g_old) / dp
+
+                self.updates.append(K.update(m1_t, m1_v))
+                self.updates.append(K.update(m2_t, m2_v))
+
+                # change in parameter
+                dp_new = - lr * m1_v / (dp + self.hess * m2_v)
+
+                new_p = p + dp_new
+
+                # apply constraints
+                if p in constraints:
+                    c = constraints[p]
+                    new_p = c(new_p)
+                    dp_new = p - new_p
+
+                self.updates.append(K.update(g_old, g))
+                self.updates.append(K.update(dp, dp_new))
+                self.updates.append(K.update(p, new_p))
+        else:
+            self.weights = [self.iterations] + dps + g_olds
+
+            for p, g, g_old, dp in zip(params, grads, g_olds, dps):
+
+
+                # change in parameter
+                dp_new = - lr * g * dp / (dp + self.hess * (g - g_old))
+
+                new_p = p + dp_new
+
+                # apply constraints
+                if p in constraints:
+                    c = constraints[p]
+                    new_p = c(new_p)
+                    dp_new = p - new_p
+
+                self.updates.append(K.update(g_old, g))
+                self.updates.append(K.update(dp, dp_new))
+                self.updates.append(K.update(p, new_p))
         return self.updates
 
     def get_config(self):
         config = {'lr': float(K.get_value(self.lr)),
-                  'beta_1': float(K.get_value(self.beta_1)),
-                  'beta_2': float(K.get_value(self.beta_2)),
-                  'decay': float(K.get_value(self.decay)),
+                  'm1': float(K.get_value(self.m1)),
+                  'm2': float(K.get_value(self.m2)),
+                  'hess': float(K.get_value(self.hess)),
                   'epsilon': self.epsilon}
-        base_config = super(Adam, self).get_config()
+        base_config = super(CoordDescent, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+
 
 
 class GraVa(Optimizer):
@@ -777,13 +815,12 @@ class GraVa(Optimizer):
 
     """
 
-    def __init__(self, lr=0.1, beta_1=0.99, beta_2=0.99,
+    def __init__(self, lr=0.1, beta=0.99,
                  var_care=1, decay=0.,sqrt = 0,momentum=0, **kwargs):
         super(GraVa, self).__init__(**kwargs)
         self.iterations = K.variable(0, name='iterations')
         self.lr = K.variable(lr, name='lr')
-        self.beta_1 = K.variable(beta_1, name='beta_1')
-        self.beta_2 = K.variable(beta_2, name='beta_2')
+        self.beta = K.variable(beta_1, name='beta')
         self.var_care = K.variable(var_care, name='var_care')
         self.decay = K.variable(decay, name='decay')
         self.initial_decay = decay
@@ -803,8 +840,9 @@ class GraVa(Optimizer):
         if self.initial_decay > 0:
             lr *= (1. / (1. + self.decay * self.iterations))
 
+        # biases for the start
         t = self.iterations + 1
-
+        b1 = (1. - K.pow(self.beta, t))
 
         shapes = [K.get_variable_shape(p) for p in params]
         ms = [K.zeros(shape) for shape in shapes]
@@ -812,18 +850,18 @@ class GraVa(Optimizer):
         self.weights = [self.iterations] + ms + vs
 
         for p, g, m, v in zip(params, grads, ms, vs):
-            m_t = (self.beta_1 * m) + (1. - self.beta_1) * g
-            v_t = (self.beta_2 * v) + (1. - self.beta_2) * K.square(g)
+            m_t = (self.beta * m) + (1. - self.beta) * g
+            v_t = (self.beta * v) + (1. - self.beta) * K.square(g)
 
             #Use std dev or variance?
             if self.sqrt_bool:
-                var = K.sqrt(K.square(m_t) - v_t)
+                var = K.sqrt(b1 * (K.square(m_t) - v_t))
             else:
                 var = (K.square(m_t) - v_t)
             # use momemtum or not
             gr = (self.momentum_bool * m_t + (1 - self.momentum_bool) * g)
 
-            p_t = p - lr * gr / (1 + self.var_care * var)
+            p_t = p - lr * gr / (b1 + self.var_care * var)
 
             self.updates.append(K.update(m, m_t))
             self.updates.append(K.update(v, v_t))
@@ -838,9 +876,9 @@ class GraVa(Optimizer):
 
     def get_config(self):
         config = {'lr': float(K.get_value(self.lr)),
-                  'beta_1': float(K.get_value(self.beta_1)),
-                  'beta_2': float(K.get_value(self.beta_2)),
+                  'beta': float(K.get_value(self.beta_1)),
                   'decay': float(K.get_value(self.decay)),
+                  'var_care': float(K.get_value(self.var_care)),
                   'epsilon': self.epsilon}
         base_config = super(GraVa, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
