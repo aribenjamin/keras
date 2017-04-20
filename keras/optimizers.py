@@ -739,7 +739,7 @@ class CoordDescent(Optimizer):
 
             t = self.iterations + 1
             b1 = (1. - K.pow(self.m1, t))
-            b2 = (1. - K.pow(self.m2, t)))
+            b2 = (1. - K.pow(self.m2, t))
 
             ms = [K.zeros(shape) for shape in shapes]
             vs = [K.zeros(shape) for shape in shapes]
@@ -855,9 +855,9 @@ class GraVa(Optimizer):
 
             #Use std dev or variance?
             if self.sqrt_bool:
-                var = K.sqrt(b1 * (K.square(m_t) - v_t))
+                var = K.sqrt(b1 * v_t + K.square(m_t))
             else:
-                var = (K.square(m_t) - v_t)
+                var = (v_t - K.square(m_t)/b1)
             # use momemtum or not
             gr = (self.momentum_bool * m_t + (1 - self.momentum_bool) * g)
 
