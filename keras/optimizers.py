@@ -777,8 +777,8 @@ class GraVa(Optimizer):
 
     """
 
-    def __init__(self, lr=0.001, beta_1=0.9, beta_2=0.999,
-                 var_care=1, decay=0., **kwargs):
+    def __init__(self, lr=0.1, beta_1=0.99, beta_2=0.99,
+                 var_care=1, decay=0.,sqrt = 0,momentum=0, **kwargs):
         super(GraVa, self).__init__(**kwargs)
         self.iterations = K.variable(0, name='iterations')
         self.lr = K.variable(lr, name='lr')
@@ -787,6 +787,8 @@ class GraVa(Optimizer):
         self.var_care = K.variable(var_care, name='var_care')
         self.decay = K.variable(decay, name='decay')
         self.initial_decay = decay
+        self.momentum_bool = K.variable(momentum, name='momentum_bool')
+        self.sqrt_bool = K.variable(sqrt, name='sqrt_bool')
 
     def get_updates(self, params, constraints, loss):
         grads = self.get_gradients(loss, params)
@@ -812,7 +814,16 @@ class GraVa(Optimizer):
         for p, g, m, v in zip(params, grads, ms, vs):
             m_t = (self.beta_1 * m) + (1. - self.beta_1) * g
             v_t = (self.beta_2 * v) + (1. - self.beta_2) * K.square(g)
-            p_t = p - lr * g / (1 + self.var_care * (K.square(m_t) - v_t))
+
+            #Use std dev or variance?
+            if self.sqrt_bool:
+                var = K.sqrt(K.square(m_t) - v_t)
+            else:
+                var = (K.square(m_t) - v_t)
+            # use momemtum or not
+            gr = (self.momentum_bool * m_t + (1 - self.momentum_bool) * g)
+
+            p_t = p - lr * gr / (1 + self.var_care * var)
 
             self.updates.append(K.update(m, m_t))
             self.updates.append(K.update(v, v_t))
@@ -831,8 +842,10 @@ class GraVa(Optimizer):
                   'beta_2': float(K.get_value(self.beta_2)),
                   'decay': float(K.get_value(self.decay)),
                   'epsilon': self.epsilon}
-        base_config = super(Adam, self).get_config()
+        base_config = super(GraVa, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+
 
 
 # Aliases.
@@ -873,6 +886,7 @@ def deserialize(config, custom_objects=None):
         'adamax': Adamax,
         'nadam': Nadam,
         'tfoptimizer': TFOptimizer,
+        'grava': Grava,
     }
     # Make deserialization case-insensitive for built-in optimizers.
     if config['class_name'].lower() in all_classes:
