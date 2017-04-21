@@ -834,9 +834,10 @@ class GraVa(Optimizer):
 
         self.updates = [K.update_add(self.iterations, 1)]
 
-        lr = self.lr
+        var_care = self.var_care
+
         if self.initial_decay > 0:
-            lr *= (1. / (1. + self.decay * self.iterations))
+            var_care *= (1. / (1. + self.decay * self.iterations))
 
         # biases for the start
         t = self.iterations + 1
@@ -853,13 +854,13 @@ class GraVa(Optimizer):
 
             #Use std dev or variance?
             if self.sqrt_bool:
-                var = K.sqrt(b1 * v_t + K.square(m_t))
+                var = K.sqrt(b1 * v_t - K.square(m_t))
             else:
                 var = (v_t - K.square(m_t)/b1)
             # use momemtum or not
             gr = (self.momentum_bool * m_t + (1 - self.momentum_bool) * g)
 
-            p_t = p - lr * gr / (b1 + self.var_care * var)
+            p_t = p - self.lr * gr / (b1 + var_care * var)
 
             self.updates.append(K.update(m, m_t))
             self.updates.append(K.update(v, v_t))
