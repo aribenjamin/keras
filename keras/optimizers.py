@@ -816,12 +816,12 @@ class GraVa(Optimizer):
     """
 
     def __init__(self, lr=0.1, beta=0.99,
-                 var_care=1, decay=0.,sqrt = False,momentum=False, **kwargs):
+                 var_care=1, decay=0.,sqrt = 0,momentum=0,pn=1., **kwargs):
         super(GraVa, self).__init__(**kwargs)
         self.iterations = K.variable(0, name='iterations')
         self.lr = K.variable(lr, name='lr')
         self.beta = K.variable(beta, name='beta')
-        self.var_care = K.variable(var_care, name='var_care')
+        self.var_care = K.variable(var_care * pn, name='var_care')
         self.decay = K.variable(decay, name='decay')
         self.initial_decay = decay
         self.momentum_bool = K.variable(momentum, name='momentum_bool')
