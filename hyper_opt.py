@@ -11,7 +11,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-%matplotlib inline
+#%matplotlib inline
 
 #for plots
 def simpleaxis(ax):
@@ -198,9 +198,9 @@ hyperoptBest = fmin(fnc, space4rf, algo=tpe.suggest, max_evals=200, trials=grava
 
 space4rf = {
     'lr': hp.loguniform('lr', np.log(1e-5), np.log(1e-1)),
-    'hess': hp.loguniform('hess', np.log(1e-2),np.log(1e0)),
-    'm1': hp.choice('m1', [0,.9,.99]),
-    'm2': hp.choice('m2', [0,.9,.99]),
+    'hess': hp.loguniform('hess', np.log(1e-3),np.log(1e0)),
+    'm1': hp.choice('m1', [0,.9]),
+    'm2': hp.choice('m2', [0,.9]),
 }
 
 coord_trials = Trials()
@@ -219,7 +219,7 @@ def fnc(params):
     gr_model.add(Dense(num_classes, activation='softmax'))
 
 
-    opt = keras.optimizers.GraVa(**params)
+    opt = keras.optimizers.CoordDescent(**params)
     gr_model.compile(loss=keras.losses.categorical_crossentropy,
                                    optimizer=opt,
                                       metrics=['accuracy'])
@@ -234,7 +234,7 @@ def fnc(params):
     print(score, params)
     return {'loss':score[0], 'status': STATUS_OK }
 
-hyperoptBest = fmin(fnc, space4rf, algo=tpe.suggest, max_evals=200, trials=coord_trials)
+#hyperoptBest = fmin(fnc, space4rf, algo=tpe.suggest, max_evals=200, trials=coord_trials)
 
 
 
